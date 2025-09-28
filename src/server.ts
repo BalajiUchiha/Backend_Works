@@ -1,12 +1,23 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response,Application} from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import authRoute from './routes/authRoutes';
 import { errorMiddleware } from './utils/exceptions/errorMiddleware';
-const app = express();
+const app:Application = express();
 const port = 3000;
+app.use(cors())
+app.use(helmet())
+app.use(morgan('dev'))
+app.use(express.json())
+app.use(errorMiddleware)
+
+app.use('/api/auth',authRoute)
 
 app.get('/', (req: Request, res: Response) => {
-  res.send(`Hey Balaji 😘, your backend is alive and thriving!`);
+  res.send(`Hey our backend is alive and thriving!`);
 });
-app.use(errorMiddleware)
+
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
 });
