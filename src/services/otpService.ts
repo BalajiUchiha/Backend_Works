@@ -58,6 +58,8 @@ export class VerificationService
   {
     console.log("Request to verify code for ",identifier," of type ",type," to verify otp is recieved",code);
     await pool.query(`DELETE FROM verifications WHERE expires_at < NOW()`);
+    await pool.query(`DELETE FROM verifications WHERE identifier=$1 AND expires_at < NOW()`,[identifier]);
+    console.log("Deleted expired codes and previous codes for ",identifier);
     const result=await pool.query(`SELECT id FROM verifications WHERE identifier=$1 AND code=$2 AND expires_at > NOW()`,[identifier,code]);
     if(result.rows.length===0)
     {
@@ -75,6 +77,7 @@ export class VerificationService
     await pool.query(`UPDATE users SET ${vcolumn}=TRUE WHERE id=$1`,[user_id]);
     console.log("User's ",vcolumn," set to TRUE for user id ",user_id);
     await pool.query(`DELETE FROM verifications WHERE id=$1`,[otp_id])
+    await pool.query(`DELETE FROM verifications WHERE identifier=$1`,[identifier]);
     console.log("Deleted verification record with id ",otp_id);
     return {message:"Code verified successfully"};
   }
