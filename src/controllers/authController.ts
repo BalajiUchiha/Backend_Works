@@ -29,7 +29,6 @@ export class AuthController
         }
 
 
-
     }
     async verify(req:Request,res:Response,next:NextFunction)
     { 
@@ -69,5 +68,25 @@ export class AuthController
         await pool.query(`DELETE FROM verifications WHERE identifier=$1`,[identifier]);
         await this.verService.sendCode(identifier,type);
         return res.status(200).json(successResponse(200,"Otp Resent Successfully"));
+    }
+    async Login(req: Request, res: Response, next: NextFunction)
+  {
+        try {
+            const { identifier, password } = req.body;
+            const user = await this.authService.login(identifier, password);
+            res.status(200).json(successResponse(user,"Login SuccessFull"));
+        } catch (err: any) {
+            next(err instanceof HttpException ? err : new HttpException(500, err.message));
+        }
+    }
+    async RefreshToken(req: Request, res: Response, next: NextFunction)
+    {
+        try {
+            const { refreshToken } = req.body;
+            const tokenData = await this.authService.refreshToken(refreshToken);
+            res.json(successResponse(tokenData));
+        } catch (err) {
+            next(err);
+        }
     }
 }

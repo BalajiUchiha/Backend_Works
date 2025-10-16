@@ -1,9 +1,12 @@
 import { HttpException } from "../utils/exceptions/httpException";
 import pool from "../config/db";
+import jwt from "jsonwebtoken";
 import { VerificationService } from "./otpService";
 import bcrypt from 'bcrypt';
 
 const vService=new VerificationService();
+const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
+const REFRESH_SECRET = process.env.REFRESH_SECRET || "refreshsupersecret";
 export class authService
 {
     async initiateSignup(identifier:string)
@@ -56,5 +59,87 @@ export class authService
         console.log("Signup completed for ",identifier)
         return {message:"Signup completed successfully"};
     }
+    async login(identifier: string, password: string) {
+        const isMobile = /^[0-9]{10}$/.test(identifier);
+        const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
+        const type = isMobile ? "mobile_number" : "email";
+
+        if (!isMobile && !isEmail) {  
+            throw new HttpException(400, "Invalid type of credentials");
+        }
+
+        const user = await pool.query(
+            `SELECT u.id, ac.password_hash 
+             FROM users u 
+             JOIN auth_credentials ac ON ac.user_id = u.id 
+             WHERE u.${type}=$1`,
+            [identifier]
+        );
+
+        if (user.rows.length === 0) {
+            throw new HttpException(404, "User not found");
+        }
+
+        const { id, password_hash } = user.rows[0];
+
+        const validPassword = await bcrypt.compare(password, password_hash);
+        if (!validPassword) {
+            throw new HttpException(401, "Invalid credentials");
+        }
+
+        const accessToken = jwt.sign(
+            { id, identifier },
+            JWT_SECRET,
+            { expiresIn: "15m" }
+        );
+
+        const refreshToken = jwt.sign(
+            { id, identifier },
+            REFRESH_SECRET,
+            { expiresIn: "7d" }
+        );
+
+        await pool.query(
+            `INSERT INTO auth_sessions (user_id, refresh_token, created_at, expires_at) 
+             VALUES ($1, $2, NOW(), NOW() + interval '7 days')`,
+            [id, refreshToken]
+        );
+
+        return {
+            message: "Login successful",
+            accessToken,
+            refreshToken
+        };
+    }
+    async refreshToken(refreshToken: string) {
+    try {
+        const decoded: any = jwt.verify(refreshToken, REFRESH_SECRET);
+        console.log("Decoded the refresh token",decoded)
+        const session = await pool.query(
+            `SELECT * FROM auth_sessions 
+             WHERE refresh_token = $1 AND expires_at > NOW()`,
+            [refreshToken]
+        );
+       console.log("checked for stored token")
+        if (session.rows.length === 0) {
+            throw new HttpException(401, "Invalid or expired refresh token");
+        }
+
+        const userId = decoded.id;
+        console.log("User_id",userId)
+        console.log("Creating New access Token")
+        const newAccessToken = jwt.sign(
+            { id: userId, identifier: decoded.identifier },
+            JWT_SECRET,
+            { expiresIn: "15m" }
+        );
+        console.log("Created new access token")
+
+        return { accessToken: newAccessToken };
+    } catch (err) {
+        throw new HttpException(401, "Invalid refresh token");
+    }
+}
+
    
 }
