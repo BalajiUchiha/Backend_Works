@@ -2,14 +2,16 @@ import { HttpException } from "../utils/exceptions/httpException";
 import {Request,Response,NextFunction} from 'express';
 import { authService } from "../services/authService";
 import { successResponse } from "../utils/apiResponse";
-
-
+import { VerificationService } from "../services/otpService";
+import pool from '../config/db';
 export class AuthController
 {
     private authService:authService;
+    private verService:VerificationService;
     constructor()
     {
         this.authService=new authService();
+        this.verService=new VerificationService();
     }
     async signup(req:Request,res:Response,next:NextFunction)
     {
@@ -55,7 +57,20 @@ export class AuthController
             next(err)
         }
     }
-    async Login(req: Request, res: Response, next: NextFunction) {
+    async resend(req:Request,res:Response,next:NextFunction)
+    {
+        const{identifier}=req.body; 
+        const isMobile=/^[0-9]{10}$/.test(identifier);
+        const isEmail=/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
+        const type=isMobile?"mobile_number":"email";
+        console.log("Identifier is ",identifier," Type is ",type);
+        await pool.query(`DELETE FROM verifications WHERE expires_at < NOW()`);
+        await pool.query(`DELETE FROM verifications WHERE identifier=$1`,[identifier]);
+        await this.verService.sendCode(identifier,type);
+        return res.status(200).json(successResponse(200,"Otp Resent Successfully"));
+    }
+    async Login(req: Request, res: Response, next: NextFunction)
+  {
         try {
             const { identifier, password } = req.body;
             const user = await this.authService.login(identifier, password);
